@@ -1,3 +1,13 @@
+def print_grid():
+    global top, mid, bot
+    top_border = "---------"
+    print(top_border)
+    print("| {} {} {} |".format(top[0],top[1], top[2]))  # printing symbols separately so it's possible to have a blankspace between each of three sybmols
+    print("| {} {} {} |".format(mid[0],mid[1], mid[2]))
+    print("| {} {} {} |".format(bot[0],bot[1], bot[2]))
+    print(top_border)
+
+
 # creating check-variables, describing potential scenarios
 toprow_win, midrow_win, botrow_win, leftcol_win, midcol_win, rightcol_win, ldialonal, rdialonal = None, None, None, None, None, None, None, None
 def possible_combinations():
@@ -43,18 +53,54 @@ def possible_combinations():
         rdialonal = False
 
 
-top_border = "---------"
-start = input("Enter cells:\n")
+def user_move():
+    #column, row = input("Enter the coordinates:").split()  #task desction was not correct
+    row, column = input("Enter the coordinates:").split()
 
+    global start, current_field
+    try:
+        column = int(column)
+        row = int(row)
+        column -= 1
+        row -= 1
+        if current_field[row][column] == "X":
+            pass
+        if current_field[row][column] == "O":
+            pass
+    except ValueError:
+        print("You should enter numbers!")
+        user_move()
+    except IndexError:
+        print("Coordinates should be from 1 to 3!")
+        user_move()
+    else:
+        if current_field[row][column] == "X" or current_field[row][column] == "O":
+            print("This cell is occupied! Choose another one!")
+            user_move()
+        else:
+            #print(column, row)
+            current_field[row][column] = "X"  #bug was here, equality instead of assigning
+            print_grid()
+
+
+start = input("Enter cells:\n")
+#start = "_XXOO_OX_"
 if len(start) == 9:
-    top= start[0:3]
-    mid = start[3:6]
-    bot = start[6:9]
-    print(top_border)
-    print("| {} {} {} |".format(top[0],top[1], top[2]))  # printing symbols separately so it's possible to have a blankspace between each of three sybmols
-    print("| {} {} {} |".format(mid[0],mid[1], mid[2]))
-    print("| {} {} {} |".format(bot[0],bot[1], bot[2]))
-    print(top_border)
+    #top = start[0:3]
+    #mid = start[3:6]
+    #bot = start[6:9]
+    start = list(start)
+    current_field = [start[0:3], start[3:6], start[6:9]]
+    top = current_field[0]
+    mid = current_field[1]
+    bot = current_field[2]
+
+    #print(top)
+    #print("FIRST PRINT OF CURRENT FIELD", current_field)
+
+
+    print_grid()  # print 1st grid
+    user_move()
 
 
     x = start.count("X")
@@ -74,10 +120,10 @@ if len(start) == 9:
 
     #looking for a winner on a row level
     if toprow_win:
-            if top[0] == "O":
-                print("O wins")
-            else:
-                print("X wins")
+        if top[0] == "O":
+            print("O wins")
+        else:
+            print("X wins")
     elif midrow_win:
         if mid[0] == "O":
             print("O wins")
