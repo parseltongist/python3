@@ -7,11 +7,6 @@ conn = sqlite3.connect('card.s3db')
 cur = conn.cursor()
 
 
-# Executes some SQL query
-# cur.execute("DROP DATABASE IF EXISTS card")
-
-# cur.execute("CREATE DATABASE IF NOT EXISTS card")
-# conn.commit()
 cur.execute("""CREATE TABLE IF NOT EXISTS card (
             id INTEGER PRIMARY KEY,
             number TEXT,
@@ -23,6 +18,7 @@ cur.execute("""CREATE TABLE IF NOT EXISTS card (
 conn.commit()
 conn.close()
 
+
 class Bank:
     def __init__(self):
         self.data = {}  # empty dictionary
@@ -32,6 +28,7 @@ class Bank:
         self.pin = None
         self.control_digit = None
         self.balance = 0
+        self.logged_userID = None
 
 
     def establish_connection(self):  # not working yet
@@ -95,6 +92,7 @@ Your card PIN:
         self.establish_connection()  # connecting to an SQL DB
         # working check method if returned value (login + password exist in a DB)
         if cur.execute("SELECT * FROM card WHERE number == ? and pin == ?",(login, password)).fetchone():  # fetchone() method returns one selected value. so this function cheching if such value exists
+            self.logged_userID = login
             return self.log_in_success()
         else:
             return self.log_in_failure()
@@ -106,32 +104,34 @@ Your card PIN:
 
 
     def luhn_algorithm_check(self, cc_number):
-        for x in range(len(cc_number)):
-            cc_number[x] = int(cc_number[x])
-        for x in range(0, len(cc_number), 2):
-            cc_number[x] *= 2
-        for x in range(len(first_15)):
-            if cc_number[x] > 9:
-                cc_number[x] -= 9
-        digits_sum = sum(cc_number)
-        if digits_sum % 10 == 0:
-            return False
+        if cc_number[-1] == "0":
+            return False  # control digit cannot be 0
         else:
+            # proceed with calculations:
+            cc_number = [int(x) for x in cc_number]
+            without_controlD = cc_number[0:15]
+            for x in range(0, len(without_controlD), 2):
+                without_controlD[x] *= 2
+            for x in range(len(without_controlD)):
+                if without_controlD[x] > 9:
+                    without_controlD[x] -= 9
+            digits_sum = sum(without_controlD)
+            #  obtaning control digit and check if it mathes provided one.
             control_digit = int(10 - (digits_sum % 10))
-            if control_digit == cc_number[15]:
+            if control_digit == cc_number[15]: # numerating starts with 0, so checking if control digit provided mathes the generated
                 return True
             else:
                 return False
         return None
 
+
     def get_control_digit(self):
-            # прогнать #first 15 через все шаги и затем присвоить уже контрольную цифру? умножить нечетные позиции на 2 ы
-            #adding
+        #first 15 means that we currently don't have a control digit for our CC
         first_15 = list(str(self.iin) + str(self.acc_num))
         first_15 = [int(x) for x in first_15]
         #calculating
-        for x in range(len(first_15)):
-            first_15[x] = int(first_15[x])
+        #for x in range(len(first_15)):
+        #    first_15[x] = int(first_15[x])
         for x in range(0, len(first_15), 2):
             first_15[x] *= 2
         for x in range(len(first_15)):
@@ -168,7 +168,7 @@ Your card PIN:
         return self.main_menu()
 
 
-    def add_income(self):
+    def add_income(self):  # there was a bug here, as function used to add the money to all existing cards, something was wrong with filter
         self.balance += int(input("Enter income:\n"))
         print('Income was added!')
         conn = sqlite3.connect('card.s3db')
@@ -178,32 +178,70 @@ Your card PIN:
                         balance = ?
                     WHERE
                         number == ?''',
-                        (self.balance, self.card_number))
+                        #(self.balance, self.card_number))
+                        (self.balance, self.logged_userID))
+
         conn.commit()
         conn.close()
 
         return self.user_menu()
 
+
     def do_transfer(self):
         # will check in two ways 1) luhn algorithm 2) if CC num id DB
         card_number = input("Enter card number:\n")
-        if luhn_algorithm_check(card_number):
-            #if card in DB:
-            #transfer_amount = input("Enter how much money you want to transfer:")
-            # check if user has this money, if not print("Not enough money!") return self.user_menu() or print("Success!") return self.user_menu()
-            #else:
-            # print("Such a card does not exist.")
-            #return self.user_menu()
-            print("algorithm is working. - UPDATE DB")
+        # First of all checking if card number can exist based on Luhn algorithm.
+        if Bank.luhn_algorithm_check(self, card_number):
+            #print("ALHORITHM PASSED")
+            conn = sqlite3.connect('card.s3db')  # connecting to a DB
+            cur = conn.cursor()  # connecting to a DB
+            # If card exists in our DB, proceed with transfer
+            # very important room for bug in the next line is missing "," after 1st varialbe in brackets!
+            if cur.execute("SELECT * FROM card WHERE number == ?",(card_number,)).fetchone():  # fetchone() method returns one selected value. so this function checking if such value exists:
+                transfer_amount = int(input("Enter how much money you want to transfer:\n"))
+                if transfer_amount <= self.balance:
+                    # Decreasing balance of current user:
+                    cur.execute('''UPDATE card
+                                SET
+                                    balance = balance - ?
+                                WHERE
+                                    number == ?''',
+                                                    (transfer_amount, self.logged_userID))
+
+                    conn.commit()  # commit changes
+                    conn.close()
+
+                    conn = sqlite3.connect('card.s3db')  # connecting to a DB
+                    cur = conn.cursor()  # connecting to a DB
+                    cur.execute('''UPDATE card
+                                SET
+                                    balance = balance + ?
+                                WHERE
+                                    number == ?''',
+                                                    (transfer_amount, card_number))
+                    conn.commit()  # commit changes
+                    conn.close()
+                    print("Success!")
+                    return self.user_menu()
+                else:
+                    print("Not enough money!")
+                    return self.user_menu()
+            else:
+                print("Such a card does not exist.")
+                return self.user_menu()
+        # If card doest not exist in our DB, print an error and return user_menu
         else:
             print('Probably you made mistake in card number. Please try again!')
             return self.user_menu()
 
 
     def close_account(self):
-        cur.execute("DELETE FROM card WHERE 'number' = ?",(self.card_number))
+        conn = sqlite3.connect('card.s3db')  # connecting to a DB
+        cur = conn.cursor()  # connecting to a DB
+        cur.execute("DELETE FROM card WHERE number = ?",(self.logged_userID,))
         conn.commit()
         print("The account has been closed!")
+        return self.main_menu()
 
     def user_menu(self):
         action = input('''
